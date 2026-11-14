@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>최소 신장 트리(MST) 동작 시각화 비교: Prim vs Kruskal</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Pretendard / Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-sans: 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    .font-mono-code {
+      font-family: var(--font-mono);
+    }
+
+    /* SVG Transitions & Animations */
+    .edge-line {
+      transition: stroke 0.35s ease, stroke-width 0.35s ease, opacity 0.35s ease, stroke-dasharray 0.35s ease;
+    }
+    .vertex-circle {
+      transition: fill 0.35s ease, stroke 0.35s ease, stroke-width 0.35s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform-origin: center;
+      transform-box: fill-box;
+    }
+    .vertex-active {
+      transform: scale(1.12);
+    }
+    .weight-badge {
+      transition: fill 0.35s ease, stroke 0.35s ease, transform 0.3s ease;
+      transform-origin: center;
+      transform-box: fill-box;
+    }
+
+    /* Pulse ring animation for currently inspected edge/vertex */
+    @keyframes pulseGlow {
+      0%, 100% {
+        filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.7));
+      }
+      50% {
+        filter: drop-shadow(0 0 12px rgba(56, 189, 248, 1));
+      }
+    }
+    .active-glow {
+      animation: pulseGlow 1.5s infinite ease-in-out;
+    }
+
+    @keyframes rejectShake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-3px); }
+      40%, 80% { transform: translateX(3px); }
+    }
+    .reject-anim {
+      animation: rejectShake 0.45s ease-in-out;
+    }
+
+    @keyframes dashFlow {
+      to {
+        stroke-dashoffset: -20;
+      }
+    }
+    .candidate-dash {
+      stroke-dasharray: 6 4;
+      animation: dashFlow 1.2s linear infinite;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-sky-500 selection:text-white">
+
+  <!-- ================= HEADER & CONTROLS BAR ================= -->
+  <header class="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 shadow-lg">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Left: Title & Subtitle -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center shadow-md shadow-sky-500/20 font-extrabold text-slate-950 text-lg">
+          M
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white">
+              최소 신장 트리(MST) 알고리즘 비교 시각화: <span class="text-sky-400">Prim</span> vs <span class="text-violet-400">Kruskal</span>
+            </h1>
+            <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+              정점 V = 7, 간선 E = 11
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">
+            2026-2 알고리즘 과제 (주제 A) · 단계별 내부 동작 및 선택/기각 이유 비교 분석
+          </p>
+        </div>
+      </div>
+
+      <!-- Center: Step Controls -->
+      <div id="playbackControls" class="flex items-center gap-1.5 sm:gap-2 bg-slate-950/90 px-3 py-1.5 rounded-xl border border-slate-800 shadow-inner">
+        <button id="btnReset" onclick="resetStep()" title="처음으로 (단축키: R)"
+          class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1 active:scale-95">
+          <span>⏮</span> <span class="hidden sm:inline">처음</span>
+        </button>
+
+        <button id="btnPrev" onclick="prevStep()" title="이전 단계 (단축키: ←)"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none active:scale-95">
+          <span>◀</span> <span>이전</span>
+        </button>
+
+        <!-- Step Counter Pill -->
+        <div class="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700/80 text-center min-w-[92px]">
+          <div class="text-[10px] text-slate-400 font-medium leading-none">현재 진행 단계</div>
+          <div class="text-sm font-extrabold text-amber-400 font-mono-code mt-0.5">
+            Step <span id="stepCurrentText">0</span> / 8
+          </div>
+        </div>
+
+        <button id="btnNext" onclick="nextStep()" title="다음 단계 (단축키: → 또는 Space)"
+          class="px-4 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20 transition flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none active:scale-95">
+          <span>다음 (Next)</span> <span>▶</span>
+        </button>
+
+        <div class="h-5 w-[1px] bg-slate-800 mx-0.5"></div>
+
+        <button id="btnAutoPlay" onclick="toggleAutoPlay()" title="자동 재생 / 일시정지"
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 transition flex items-center gap-1.5 active:scale-95">
+          <span id="autoPlayIcon">▶</span>
+          <span id="autoPlayText">자동재생</span>
+        </button>
+
+        <select id="speedSelect" onchange="updateAutoPlaySpeed()" aria-label="재생 속도"
+          class="bg-slate-900 text-slate-300 text-xs rounded-lg px-2 py-1.5 border border-slate-700 focus:outline-none focus:border-sky-500">
+          <option value="2000">2.0초/단계</option>
+          <option value="3000" selected>3.0초/단계</option>
+          <option value="4500">4.5초/단계</option>
+        </select>
+      </div>
+
+      <!-- Right: View Mode Tabs -->
+      <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <button id="tabBtnVisualizer" onclick="switchTab('visualizer')"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition bg-sky-500 text-slate-950 shadow">
+          📊 동작 시각화 비교
+        </button>
+        <button id="tabBtnTheory" onclick="switchTab('theory')"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-slate-200">
+          📝 의사코드 & 복잡도 비교표
+        </button>
+        <button id="tabBtnSummary" onclick="switchTab('summary')"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-slate-200">
+          📑 전체 8단계 요약표
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Interactive Step Progress Timeline Bar -->
+    <div id="timelineBar" class="max-w-[1600px] mx-auto mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5 w-full overflow-x-auto pb-1 sm:pb-0">
+        <!-- Populated dynamically by JS -->
+        <div id="stepButtonsContainer" class="flex items-center gap-1.5 w-full"></div>
+      </div>
+
+      <!-- Color Legend -->
+      <div class="hidden xl:flex items-center gap-3 shrink-0 text-[11px] text-slate-300 bg-slate-950/80 px-3 py-1 rounded-lg border border-slate-800">
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-sky-400 inline-block shadow-[0_0_8px_#38bdf8]"></span>이번 단계 선택/검사</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-1 bg-emerald-400 inline-block rounded"></span>MST 확정 간선</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-1 border-b-2 border-dashed border-amber-400 inline-block"></span>Prim 후보 큐</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500/30 border border-rose-500 text-rose-400 flex items-center justify-center text-[9px] font-bold">✕</span>사이클 기각</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN CONTENT: TAB 1 - VISUALIZER ================= -->
+  <main id="viewVisualizer" class="flex-1 max-w-[1600px] w-full mx-auto px-4 py-3 flex flex-col gap-3">
+    
+    <!-- Key Highlight Banner for current step -->
+    <div id="stepHighlightBanner" class="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+      <div class="flex items-center gap-2.5">
+        <span id="stepBadgeTag" class="px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/40 font-mono-code">
+          STEP 0
+        </span>
+        <span id="stepHighlightTitle" class="text-sm font-bold text-white">
+          초기 상태: 시작 정점 설정(Prim) vs 전체 간선 오름차순 정렬(Kruskal)
+        </span>
+      </div>
+      <div id="stepDiffNote" class="text-xs text-amber-300 font-medium flex items-center gap-1.5">
+        <span>💡</span>
+        <span>키보드 방향키(← / →) 또는 상단 Next 버튼을 눌러 단계별로 비교해 보세요.</span>
+      </div>
+    </div>
+
+    <!-- Side-by-Side Dual Algorithm Comparison Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1">
+
+      <!-- ==================== LEFT PANEL: PRIM'S ALGORITHM ==================== -->
+      <section class="bg-slate-900/90 border border-sky-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden">
+        <!-- Top Accent Line -->
+        <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400"></div>
+
+        <!-- Panel Header & Live Metrics -->
+        <div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[11px] font-extrabold bg-sky-500 text-slate-950">정점 중심 확장</span>
+                <h2 class="text-base sm:text-lg font-extrabold text-sky-300">Prim 알고리즘 (시작 정점: A)</h2>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">
+                현재 트리에 연결된 인접 후보 간선 중 <strong class="text-slate-200">최소 가중치 간선</strong>을 우선순위 큐(Min-Heap)에서 선택
+              </p>
+            </div>
+
+            <!-- Live Score Badges -->
+            <div class="flex items-center gap-2">
+              <div class="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400">선택 간선 수</div>
+                <div id="primEdgeCount" class="text-sm font-extrabold text-emerald-400 font-mono-code">0 / 6</div>
+              </div>
+              <div class="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400">누적 가중치 합</div>
+                <div id="primTotalCost" class="text-sm font-extrabold text-amber-400 font-mono-code">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SVG Graph Canvas for Prim -->
+          <div class="my-2.5 bg-slate-950/90 rounded-xl border border-slate-800/90 relative flex items-center justify-center p-2">
+            <div class="absolute top-2.5 left-3 flex flex-col gap-1 z-10 pointer-events-none">
+              <span class="text-[11px] font-semibold text-slate-400 bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800">
+                🌲 단일 트리가 정점 A에서부터 점진적으로 확장됨
+              </span>
+            </div>
+            <div id="primActionBadge" class="absolute top-2.5 right-3 z-10 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 shadow">
+              대기 중
+            </div>
+
+            <svg id="primSvg" viewBox="0 0 520 335" class="w-full max-h-[290px] select-none">
+              <defs>
+                <filter id="glowSky" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3.5" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+              <!-- Edges Group -->
+              <g id="primEdgesGroup"></g>
+              <!-- Vertices Group -->
+              <g id="primVerticesGroup"></g>
+            </svg>
+          </div>
+
+          <!-- Internal Data Structures: Visited Array + Priority Queue -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 my-2">
+            <!-- Visited Vertices Array (5 cols) -->
+            <div class="sm:col-span-5 bg-slate-950/90 rounded-xl p-2.5 border border-slate-800">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400"></span>방문 정점 집합 (Visited)
+                </span>
+                <span id="primVisitedCount" class="text-[10px] font-mono-code text-emerald-400 font-semibold">1 / 7</span>
+              </div>
+              <div id="primVisitedBox" class="grid grid-cols-7 gap-1 pt-0.5">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+
+            <!-- Priority Queue (Min-Heap) (7 cols) -->
+            <div class="sm:col-span-7 bg-slate-950/90 rounded-xl p-2.5 border border-slate-800">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                  <span>⚡</span>우선순위 큐 (Min-Heap 후보 간선)
+                </span>
+                <span class="text-[10px] text-slate-400">가중치 오름차순 추출</span>
+              </div>
+              <div id="primPQBox" class="flex flex-wrap items-center gap-1.5 min-h-[34px]">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step Explanation Box (Korean - What & Why) -->
+        <div id="primExplainCard" class="mt-1 bg-slate-950 rounded-xl p-3.5 border-l-4 border-sky-400 border-t border-r border-b border-slate-800 shadow-md">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-extrabold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>🔍 Prim 현재 단계 분석</span>
+            </span>
+            <span id="primDecisionTag" class="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-500/20 text-sky-300">
+              초기화
+            </span>
+          </div>
+          <div class="space-y-1.5 text-xs sm:text-[13px] leading-relaxed">
+            <div class="flex items-start gap-2">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 font-bold text-[11px] shrink-0 mt-0.5">지금 무엇을 했나</span>
+              <p id="primWhatText" class="text-slate-100 font-medium"></p>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-bold text-[11px] shrink-0 mt-0.5">왜 그렇게 했나</span>
+              <p id="primWhyText" class="text-slate-300"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== RIGHT PANEL: KRUSKAL'S ALGORITHM ==================== -->
+      <section class="bg-slate-900/90 border border-violet-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden">
+        <!-- Top Accent Line -->
+        <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-400 to-emerald-400"></div>
+
+        <!-- Panel Header & Live Metrics -->
+        <div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[11px] font-extrabold bg-violet-400 text-slate-950">간선 중심 정렬</span>
+                <h2 class="text-base sm:text-lg font-extrabold text-violet-300">Kruskal 알고리즘 (Union-Find)</h2>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">
+                전체 간선을 가중치 오름차순 정렬 후 <strong class="text-slate-200">사이클을 만들지 않는 최소 간선</strong>을 차례대로 선택
+              </p>
+            </div>
+
+            <!-- Live Score Badges -->
+            <div class="flex items-center gap-2">
+              <div class="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400">선택 간선 수</div>
+                <div id="kruskalEdgeCount" class="text-sm font-extrabold text-emerald-400 font-mono-code">0 / 6</div>
+              </div>
+              <div class="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400">누적 가중치 합</div>
+                <div id="kruskalTotalCost" class="text-sm font-extrabold text-amber-400 font-mono-code">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SVG Graph Canvas for Kruskal -->
+          <div class="my-2.5 bg-slate-950/90 rounded-xl border border-slate-800/90 relative flex items-center justify-center p-2">
+            <div class="absolute top-2.5 left-3 flex flex-col gap-1 z-10 pointer-events-none">
+              <span class="text-[11px] font-semibold text-slate-400 bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800">
+                🧩 여러 부분 트리(집합)가 동시다발적으로 생겨나 병합됨
+              </span>
+            </div>
+            <div id="kruskalActionBadge" class="absolute top-2.5 right-3 z-10 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 shadow">
+              대기 중
+            </div>
+
+            <svg id="kruskalSvg" viewBox="0 0 520 335" class="w-full max-h-[290px] select-none">
+              <!-- Edges Group -->
+              <g id="kruskalEdgesGroup"></g>
+              <!-- Vertices Group -->
+              <g id="kruskalVerticesGroup"></g>
+            </svg>
+          </div>
+
+          <!-- Internal Data Structures: Disjoint Sets + Sorted Edge List -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 my-2">
+            <!-- Union-Find Disjoint Sets (5 cols) -->
+            <div class="sm:col-span-5 bg-slate-950/90 rounded-xl p-2.5 border border-slate-800">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full bg-violet-400"></span>분리 집합 (Union-Find)
+                </span>
+                <span id="kruskalSetCount" class="text-[10px] font-mono-code text-violet-300 font-semibold">집합 7개</span>
+              </div>
+              <div id="kruskalSetsBox" class="flex flex-wrap items-center gap-1 min-h-[34px]">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+
+            <!-- Sorted All 11 Edges List (7 cols) -->
+            <div class="sm:col-span-7 bg-slate-950/90 rounded-xl p-2.5 border border-slate-800">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[11px] font-bold text-violet-300 flex items-center gap-1">
+                  <span>📋</span>정렬된 전체 간선 리스트 (오름차순 11개)
+                </span>
+                <span class="text-[10px] text-slate-400">앞에서부터 순차 검사</span>
+              </div>
+              <div id="kruskalSortedEdgesBox" class="flex flex-wrap items-center gap-1 min-h-[34px]">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step Explanation Box (Korean - What & Why) -->
+        <div id="kruskalExplainCard" class="mt-1 bg-slate-950 rounded-xl p-3.5 border-l-4 border-violet-400 border-t border-r border-b border-slate-800 shadow-md">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-extrabold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>🔍 Kruskal 현재 단계 분석</span>
+            </span>
+            <span id="kruskalDecisionTag" class="px-2 py-0.5 rounded text-[11px] font-bold bg-violet-500/20 text-violet-300">
+              초기화
+            </span>
+          </div>
+          <div class="space-y-1.5 text-xs sm:text-[13px] leading-relaxed">
+            <div class="flex items-start gap-2">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-violet-300 font-bold text-[11px] shrink-0 mt-0.5">지금 무엇을 했나</span>
+              <p id="kruskalWhatText" class="text-slate-100 font-medium"></p>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-bold text-[11px] shrink-0 mt-0.5">왜 그렇게 했나</span>
+              <p id="kruskalWhyText" class="text-slate-300"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ================= MAIN CONTENT: TAB 2 - PSEUDOCODE & COMPLEXITY ================= -->
+  <section id="viewTheory" class="hidden flex-1 max-w-[1600px] w-full mx-auto px-4 py-4 space-y-5">
+    
+    <!-- 1. Algorithm Overview Cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-slate-900 border border-sky-500/30 rounded-2xl p-5 shadow-lg">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-sky-500 text-slate-950">알고리즘 1</span>
+          <h3 class="text-lg font-extrabold text-sky-300">Prim 알고리즘 (프림 알고리즘)</h3>
+        </div>
+        <p class="text-sm text-slate-300 leading-relaxed mb-3">
+          임의의 시작 정점 1개에서 출발하여, 현재까지 구성된 트리에 연결된 인접 간선들 중 <strong>가장 가중치가 작은 간선</strong>을 하나씩 선택해 정점을 추가하며 하나의 트리를 키워나가는 <strong>정점 중심(Vertex-oriented) 그리디 알고리즘</strong>입니다.
+        </p>
+        <ul class="text-xs text-slate-300 space-y-1.5 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+          <li>• <strong>핵심 자료구조:</strong> 방문 여부 배열(<code class="text-sky-300">Visited[V]</code>) + 최소 힙 우선순위 큐(<code class="text-amber-300">Min-Heap</code>)</li>
+          <li>• <strong>사이클 방지 원리:</strong> 간선 <code class="text-slate-200">(u, v)</code>를 꺼냈을 때 이동할 정점 <code class="text-slate-200">v</code>가 이미 <code class="text-emerald-400">Visited[v] == True</code>라면 트리 내부 간선이므로 기각합니다.</li>
+          <li>• <strong>유리한 환경:</strong> 간선의 수가 많은 <strong>밀집 그래프(Dense Graph, $E \approx V^2$)</strong>에서 매우 효율적입니다.</li>
+        </ul>
+      </div>
+
+      <div class="bg-slate-900 border border-violet-500/30 rounded-2xl p-5 shadow-lg">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-violet-400 text-slate-950">알고리즘 2</span>
+          <h3 class="text-lg font-extrabold text-violet-300">Kruskal 알고리즘 (크루스칼 알고리즘)</h3>
+        </div>
+        <p class="text-sm text-slate-300 leading-relaxed mb-3">
+          그래프의 모든 간선을 가중치 오름차순으로 먼저 정렬한 뒤, 가장 가중치가 작은 간선부터 순차적으로 확인하며 <strong>사이클(Cycle)을 형성하지 않는 간선</strong>만 $V-1$개 선택하여 부분 트리들을 하나로 합쳐나가는 <strong>간선 중심(Edge-oriented) 그리디 알고리즘</strong>입니다.
+        </p>
+        <ul class="text-xs text-slate-300 space-y-1.5 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+          <li>• <strong>핵심 자료구조:</strong> 정렬된 간선 배열 + 분리 집합(<code class="text-violet-300">Disjoint Set / Union-Find</code>)</li>
+          <li>• <strong>사이클 방지 원리:</strong> 간선 <code class="text-slate-200">(u, v)</code>의 양 끝 정점에 대해 <code class="text-rose-400">Find(u) == Find(v)</code>이면 이미 같은 연결 요소에 속해 경로가 존재하므로 기각합니다.</li>
+          <li>• <strong>유리한 환경:</strong> 간선의 수가 적은 <strong>희소 그래프(Sparse Graph, $E \approx V$)</strong>에서 정렬 비용이 적어 유리합니다.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 2. Core Pseudocode Comparison -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Prim Pseudocode -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-extrabold text-sky-300 flex items-center gap-2">
+            <span>💻</span> Prim 알고리즘 핵심 의사코드 (Pseudocode)
+          </h4>
+          <span class="text-[11px] font-mono-code text-slate-400">우선순위 큐(Min-Heap) 기반</span>
+        </div>
+        <pre class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono-code text-slate-200 overflow-x-auto leading-relaxed"><code><span class="text-sky-400">function</span> <span class="text-emerald-300">Prim</span>(Graph G(V, E), start_vertex s):
+    MST = []                          <span class="text-slate-500">// 선택된 최소 신장 트리 간선 집합</span>
+    Visited[1..V] = <span class="text-rose-400">False</span>             <span class="text-slate-500">// 모든 정점 미방문 초기화</span>
+    PQ = Empty Min-Heap               <span class="text-slate-500">// 가중치 기준 최소 힙</span>
+
+    Visited[s] = <span class="text-emerald-400">True</span>                 <span class="text-slate-500">// 시작 정점 A 방문 처리</span>
+    <span class="text-sky-400">for each</span> edge (s, v, weight) <span class="text-sky-400">in</span> Adj[s]:
+        PQ.push((weight, s, v))       <span class="text-slate-500">// 시작 정점에 인접한 간선 삽입</span>
+
+    <span class="text-sky-400">while</span> PQ is not empty <span class="text-sky-400">and</span> |MST| &lt; V - 1:
+        (weight, u, v) = PQ.pop_min() <span class="text-slate-500">// 후보 중 최소 가중치 간선 추출</span>
+
+        <span class="text-sky-400">if</span> Visited[v] == <span class="text-emerald-400">True</span>:        <span class="text-slate-500">// 이미 트리에 포함된 정점이면 (사이클 발생)</span>
+            <span class="text-rose-400">continue</span>                  <span class="text-slate-500">// 기각(Skip)하고 다음 후보 확인</span>
+
+        Visited[v] = <span class="text-emerald-400">True</span>             <span class="text-slate-500">// 새 정점 v를 트리에 편입</span>
+        MST.append((u, v, weight))    <span class="text-slate-500">// 간선 선택 확정</span>
+
+        <span class="text-sky-400">for each</span> edge (v, next, w) <span class="text-sky-400">in</span> Adj[v]:
+            <span class="text-sky-400">if not</span> Visited[next]:
+                PQ.push((w, v, next)) <span class="text-slate-500">// 새 정점에 연결된 후보 간선 추가</span>
+
+    <span class="text-sky-400">return</span> MST</code></pre>
+      </div>
+
+      <!-- Kruskal Pseudocode -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-extrabold text-violet-300 flex items-center gap-2">
+            <span>💻</span> Kruskal 알고리즘 핵심 의사코드 (Pseudocode)
+          </h4>
+          <span class="text-[11px] font-mono-code text-slate-400">Union-Find (Disjoint Set) 기반</span>
+        </div>
+        <pre class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono-code text-slate-200 overflow-x-auto leading-relaxed"><code><span class="text-violet-400">function</span> <span class="text-emerald-300">Kruskal</span>(Graph G(V, E)):
+    MST = []                          <span class="text-slate-500">// 선택된 최소 신장 트리 간선 집합</span>
+    <span class="text-violet-400">for each</span> vertex v <span class="text-violet-400">in</span> V:
+        parent[v] = v                 <span class="text-slate-500">// 각 정점을 독립된 집합으로 초기화</span>
+
+    SortedEdges = <span class="text-amber-300">Sort</span>(E, by weight ascending) <span class="text-slate-500">// 전체 간선 오름차순 정렬 O(E log E)</span>
+
+    <span class="text-violet-400">for each</span> edge (u, v, weight) <span class="text-violet-400">in</span> SortedEdges:
+        root_u = <span class="text-sky-300">Find</span>(u)              <span class="text-slate-500">// 정점 u가 속한 집합의 대표 루트 탐색</span>
+        root_v = <span class="text-sky-300">Find</span>(v)              <span class="text-slate-500">// 정점 v가 속한 집합의 대표 루트 탐색</span>
+
+        <span class="text-violet-400">if</span> root_u != root_v:          <span class="text-slate-500">// 서로 다른 집합이면 사이클이 생기지 않음</span>
+            MST.append((u, v, weight))<span class="text-slate-500">// 간선 선택 확정</span>
+            <span class="text-emerald-300">Union</span>(root_u, root_v)     <span class="text-slate-500">// 두 집합을 하나로 병합</span>
+
+            <span class="text-violet-400">if</span> |MST| == V - 1:        <span class="text-slate-500">// 정점 V개를 잇는 V-1개 간선 완성 시</span>
+                <span class="text-violet-400">break</span>                 <span class="text-slate-500">// 남은 간선 검사 생략 후 즉시 종료</span>
+        <span class="text-violet-400">else</span>:
+            <span class="text-slate-500">// root_u == root_v 이면 사이클 발생 -> 기각(Reject)</span>
+
+    <span class="text-violet-400">return</span> MST</code></pre>
+      </div>
+    </div>
+
+    <!-- 3. Time & Space Complexity Comparison Table -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+      <h3 class="text-base font-extrabold text-white mb-3 flex items-center gap-2">
+        <span>📊</span> 시간 · 공간 복잡도 비교표 및 도출 이유 분석
+      </h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs sm:text-sm">
+          <thead>
+            <tr class="bg-slate-950 text-slate-300 border-b border-slate-800">
+              <th class="py-3 px-4 font-bold">비교 항목</th>
+              <th class="py-3 px-4 font-bold text-sky-300">Prim 알고리즘 (이진 힙 / 우선순위 큐)</th>
+              <th class="py-3 px-4 font-bold text-violet-300">Kruskal 알고리즘 (Union-Find)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/80 text-slate-200">
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-3 px-4 font-bold text-slate-300">시간 복잡도 (Time)</td>
+              <td class="py-3 px-4 font-mono-code font-bold text-emerald-400">O(E log V) <span class="text-xs font-normal text-slate-400">(인접 행렬 시 O(V²))</span></td>
+              <td class="py-3 px-4 font-mono-code font-bold text-emerald-400">O(E log E) 또는 O(E log V)</td>
+            </tr>
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-3 px-4 font-bold text-slate-300">시간 복잡도 도출 이유</td>
+              <td class="py-3 px-4 text-slate-300 leading-relaxed">
+                • 각 정점을 방문할 때 인접한 간선들을 우선순위 큐(Min-Heap)에 삽입/삭제합니다.<br>
+                • 최대 $E$개의 간선이 힙에 들어가며, 힙의 크기는 최대 $E$이므로 1회 삽입·추출에 $O(\log E) = O(\log V^2) = O(\log V)$가 소요되어 총 <strong>$O(E \log V)$</strong>가 됩니다.
+              </td>
+              <td class="py-3 px-4 text-slate-300 leading-relaxed">
+                • 처음에 전체 간선 $E$개를 가중치 순으로 정렬하는 데 <strong>$O(E \log E)$</strong> 시간이 걸립니다.<br>
+                • 이후 각 간선에 대해 수행하는 Union-Find 연산은 경로 압축(Path Compression) 적용 시 $O(E \cdot \alpha(V)) \approx O(E)$로 매우 빠르므로, 전체 시간은 <strong>간선 정렬 단계가 지배</strong>합니다.
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-3 px-4 font-bold text-slate-300">공간 복잡도 (Space)</td>
+              <td class="py-3 px-4 font-mono-code font-bold text-amber-300">O(V + E)</td>
+              <td class="py-3 px-4 font-mono-code font-bold text-amber-300">O(V + E)</td>
+            </tr>
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-3 px-4 font-bold text-slate-300">공간 복잡도 도출 이유</td>
+              <td class="py-3 px-4 text-slate-300 leading-relaxed">
+                • 그래프 인접 리스트 저장 공간 $O(V + E)$<br>
+                • 정점 방문 배열 <code class="text-sky-300">Visited[V]</code>에 $O(V)$ 및 우선순위 큐에 최대 $O(E)$개의 후보 간선이 저장됩니다.
+              </td>
+              <td class="py-3 px-4 text-slate-300 leading-relaxed">
+                • 전체 간선 리스트 배열 저장 공간 $O(E)$<br>
+                • Union-Find를 위한 부모 포인터 배열 <code class="text-violet-300">parent[V]</code> 및 <code class="text-violet-300">rank[V]</code> 배열에 $O(V)$ 공간이 필요합니다.
+              </td>
+            </tr>
+            <tr class="hover:bg-slate-800/40">
+              <td class="py-3 px-4 font-bold text-slate-300">동작 방식의 결정적 차이</td>
+              <td class="py-3 px-4 text-slate-300">
+                항상 <strong>연결된 단일 트리(Single Tree)</strong> 상태를 유지하며 인접 정점으로 뻗어나감 (Step 2에서 <code class="text-amber-300">(E-F, 3)</code> 대신 인접한 <code class="text-sky-300">(A-D, 4)</code>를 먼저 선택하는 이유)
+              </td>
+              <td class="py-3 px-4 text-slate-300">
+                초기에 <strong>여러 개의 독립된 부분 트리(Forest)</strong>가 여기저기서 동시에 자라나다가 마지막에 하나의 트리로 합쳐짐 (Step 2에서 떨어진 <code class="text-violet-300">(E-F, 3)</code>을 즉시 선택)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ================= MAIN CONTENT: TAB 3 - ALL 8 STEPS SUMMARY TABLE ================= -->
+  <section id="viewSummary" class="hidden flex-1 max-w-[1600px] w-full mx-auto px-4 py-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div>
+          <h3 class="text-base font-extrabold text-white">📑 전체 단계(Step 0 ~ Step 8) 동작 및 선택/기각 사유 한눈에 보기</h3>
+          <p class="text-xs text-slate-400 mt-0.5">각 행을 클릭하면 해당 단계의 시각화 화면으로 즉시 이동합니다. (PDF 보고서 첨부용 요약표)</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-950 text-slate-300 border-b border-slate-800">
+              <th class="py-2.5 px-3 font-bold w-20">단계</th>
+              <th class="py-2.5 px-3 font-bold text-sky-300 w-[44%]">Prim 알고리즘 동작 및 이유</th>
+              <th class="py-2.5 px-3 font-bold text-violet-300 w-[44%]">Kruskal 알고리즘 동작 및 이유</th>
+              <th class="py-2.5 px-3 font-bold text-center w-24">누적 가중치</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody" class="divide-y divide-slate-800/80">
+            <!-- Populated dynamically by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= JAVASCRIPT LOGIC & DATA ================= -->
+  <script>
+    // 1. Graph Topology Data (7 Vertices: A~G, 11 Undirected Weighted Edges)
+    const VERTICES = {
+      A: { id: 'A', x: 105, y: 62 },
+      B: { id: 'B', x: 260, y: 38 },
+      C: { id: 'C', x: 415, y: 62 },
+      D: { id: 'D', x: 85,  y: 195 },
+      E: { id: 'E', x: 260, y: 170 },
+      F: { id: 'F', x: 435, y: 195 },
+      G: { id: 'G', x: 260, y: 298 }
+    };
+
+    const EDGES = [
+      { id: 'A-B', u: 'A', v: 'B', w: 2 },
+      { id: 'E-F', u: 'E', v: 'F', w: 3 },
+      { id: 'A-D', u: 'A', v: 'D', w: 4 },
+      { id: 'B-E', u: 'B', v: 'E', w: 5 },
+      { id: 'B-D', u: 'B', v: 'D', w: 6 },
+      { id: 'C-F', u: 'C', v: 'F', w: 7 },
+      { id: 'D-E', u: 'D', v: 'E', w: 8 },
+      { id: 'E-G', u: 'E', v: 'G', w: 9 },
+      { id: 'B-C', u: 'B', v: 'C', w: 10 },
+      { id: 'D-G', u: 'D', v: 'G', w: 11 },
+      { id: 'F-G', u: 'F', v: 'G', w: 12 }
+    ];
+
+    // Color palette for Kruskal's Disjoint Sets so separate trees stand out clearly
+    const SET_COLORS = {
+      'A': { fill: '#064e3b', stroke: '#10b981', text: '#a7f3d0' }, // Emerald
+      'B': { fill: '#1e3a8a', stroke: '#60a5fa', text: '#bfdbfe' }, // Blue
+      'C': { fill: '#581c87', stroke: '#c084fc', text: '#e9d5ff' }, // Purple
+      'D': { fill: '#7c2d12', stroke: '#fb923c', text: '#fed7aa' }, // Orange
+      'E': { fill: '#831843', stroke: '#f472b6', text: '#fbcfe8' }, // Pink
+      'F': { fill: '#134e4a', stroke: '#2dd4bf', text: '#99f6e4' }, // Teal
+      'G': { fill: '#713f12', stroke: '#facc15', text: '#fef08a' }  // Yellow
+    };
+
+    // 2. Synchronized 9 States (Step 0 ~ Step 8)
+    const STEPS = [
+      {
+        step: 0,
+        shortLabel: '초기화',
+        bannerTitle: 'Step 0 (초기 상태): 시작 정점 A 설정(Prim) vs 전체 간선 오름차순 정렬(Kruskal)',
+        diffNote: 'Prim은 시작 정점 A에 연결된 간선만 알고 시작하며, Kruskal은 그래프의 모든 간선 11개를 가중치 순으로 정렬해 둡니다.',
+        prim: {
+          visited: ['A'],
+          selectedEdges: [],
+          activeEdge: null,
+          activeType: 'init',
+          rejectedEdges: [],
+          pq: [
+            { id: 'A-B', w: 2, to: 'B' },
+            { id: 'A-D', w: 4, to: 'D' }
+          ],
+          cost: 0,
+          badgeText: '시작 정점 A 방문',
+          decisionTag: '초기 세팅',
+          what: '시작 정점으로 A를 선택하여 Visited = {A}로 표시하고, A와 인접한 간선 (A-B, 2), (A-D, 4) 2개를 우선순위 큐(Min-Heap)에 넣었습니다.',
+          why: 'Prim 알고리즘은 하나의 시작 정점에서 출발해 인접한 간선들 중 최소 가중치를 찾아 트리를 넓혀가기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: [],
+          activeEdge: null,
+          activeType: 'init',
+          rejectedEdges: [],
+          inspectedIndex: -1,
+          sets: [['A'], ['B'], ['C'], ['D'], ['E'], ['F'], ['G']],
+          cost: 0,
+          badgeText: '11개 간선 정렬 완료',
+          decisionTag: '초기 세팅',
+          what: '11개 전체 간선을 가중치 오름차순(2 → 12)으로 정렬하고, 7개 정점을 각각 독립된 집합 {A}, {B}, ..., {G}로 초기화했습니다.',
+          why: 'Kruskal 알고리즘은 전역적으로 가장 가중치가 작은 간선부터 순서대로 확인하며 사이클 없이 집합을 합쳐나가기 때문입니다.'
+        }
+      },
+      {
+        step: 1,
+        shortLabel: '1. (A-B,2)',
+        bannerTitle: 'Step 1: 두 알고리즘 모두 첫 번째로 간선 (A-B, 가중치 2) 선택',
+        diffNote: '첫 단계에서는 시작 정점 A에 인접한 최소 간선이면서 동시에 그래프 전체 최소 간선인 (A-B, 2)가 동일하게 선택됩니다.',
+        prim: {
+          visited: ['A', 'B'],
+          selectedEdges: ['A-B'],
+          activeEdge: 'A-B',
+          activeType: 'select',
+          rejectedEdges: [],
+          pq: [
+            { id: 'A-D', w: 4, to: 'D' },
+            { id: 'B-E', w: 5, to: 'E' },
+            { id: 'B-D', w: 6, to: 'D' },
+            { id: 'B-C', w: 10, to: 'C' }
+          ],
+          cost: 2,
+          badgeText: '(A-B, 2) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +2)',
+          what: '우선순위 큐에서 가중치가 가장 작은 간선 (A-B, 2)를 꺼내 MST에 추가하고, 정점 B를 방문 처리한 뒤 B의 인접 간선 3개를 큐에 추가했습니다.',
+          why: '현재 트리 {A}에서 뻗어나갈 수 있는 후보 (A-B, 2), (A-D, 4) 중 가중치가 2로 가장 작고, 도착 정점 B가 아직 미방문(Visited[B] = False) 상태이기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B'],
+          activeEdge: 'A-B',
+          activeType: 'select',
+          rejectedEdges: [],
+          inspectedIndex: 0,
+          sets: [['A', 'B'], ['C'], ['D'], ['E'], ['F'], ['G']],
+          cost: 2,
+          badgeText: '(A-B, 2) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +2)',
+          what: '정렬된 간선 리스트의 1번째 간선인 (A-B, 2)를 선택하고, 분리 집합 {A}와 {B}를 {A, B}로 병합(Union)했습니다.',
+          why: '전체 간선 중 가중치가 가장 작으며, Find(A) != Find(B)로 두 정점이 서로 다른 집합에 속해 있어 사이클을 형성하지 않기 때문입니다.'
+        }
+      },
+      {
+        step: 2,
+        shortLabel: '2. 핵심차이!',
+        bannerTitle: 'Step 2 [핵심 차이 발생!]: Prim은 인접한 (A-D, 4) 선택 vs Kruskal은 떨어진 (E-F, 3) 선택',
+        diffNote: '주목! 그래프 전체에서 (E-F, 3)이 더 작지만, Prim은 현재 트리 {A, B}와 연결되지 않은 간선은 후보로 고려하지 못합니다.',
+        prim: {
+          visited: ['A', 'B', 'D'],
+          selectedEdges: ['A-B', 'A-D'],
+          activeEdge: 'A-D',
+          activeType: 'select',
+          rejectedEdges: [],
+          pq: [
+            { id: 'B-E', w: 5, to: 'E' },
+            { id: 'B-D', w: 6, to: 'D' },
+            { id: 'D-E', w: 8, to: 'E' },
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' }
+          ],
+          cost: 6,
+          badgeText: '(A-D, 4) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +4)',
+          what: '현재 트리 {A, B}에 인접한 후보 큐에서 최소 간선인 (A-D, 4)를 선택해 정점 D를 연결하고, (D-E, 8), (D-G, 11)을 큐에 넣었습니다.',
+          why: '그래프 우측에 가중치 3인 (E-F, 3)이 존재하지만 현재 트리 {A, B}와 맞닿아 있지 않아 큐에 없습니다. 현재 인접 후보 중 최소는 4이고 D가 미방문이므로 선택합니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F'],
+          activeEdge: 'E-F',
+          activeType: 'select',
+          rejectedEdges: [],
+          inspectedIndex: 1,
+          sets: [['A', 'B'], ['E', 'F'], ['C'], ['D'], ['G']],
+          cost: 5,
+          badgeText: '(E-F, 3) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +3)',
+          what: '정렬 리스트 2번째 간선인 (E-F, 3)을 선택하여 기존 {A, B} 트리와 떨어진 위치에 새로운 부분 트리 {E, F}를 생성했습니다.',
+          why: '기존 트리와 연결되어 있는지는 따지지 않고 오직 가중치 순서(3)와 사이클 여부(Find(E) != Find(F))만 판단하므로, 두 개의 분리된 트리가 동시에 자라납니다.'
+        }
+      },
+      {
+        step: 3,
+        shortLabel: '3. (B-E,5)/(A-D,4)',
+        bannerTitle: 'Step 3: Prim은 (B-E, 5)로 중심부 진출 vs Kruskal은 (A-D, 4) 선택',
+        diffNote: 'Prim이 정점 E를 방문하면서 비로소 가중치 3짜리 간선 (E-F, 3)이 Prim의 우선순위 큐에 들어오게 됩니다!',
+        prim: {
+          visited: ['A', 'B', 'D', 'E'],
+          selectedEdges: ['A-B', 'A-D', 'B-E'],
+          activeEdge: 'B-E',
+          activeType: 'select',
+          rejectedEdges: [],
+          pq: [
+            { id: 'E-F', w: 3, to: 'F' },
+            { id: 'B-D', w: 6, to: 'D' },
+            { id: 'D-E', w: 8, to: 'E' },
+            { id: 'E-G', w: 9, to: 'G' },
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' }
+          ],
+          cost: 11,
+          badgeText: '(B-E, 5) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +5)',
+          what: '우선순위 큐에서 가장 작은 (B-E, 5)를 꺼내 정점 E를 트리에 편입시켰고, E에 연결된 (E-F, 3)이 큐의 맨 앞(최솟값)으로 들어왔습니다.',
+          why: '트리 {A, B, D}에서 뻗어나갈 수 있는 후보 간선들(5, 6, 8, 10, 11) 중 가중치가 5로 가장 작고 정점 E가 미방문 상태이기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F', 'A-D'],
+          activeEdge: 'A-D',
+          activeType: 'select',
+          rejectedEdges: [],
+          inspectedIndex: 2,
+          sets: [['A', 'B', 'D'], ['E', 'F'], ['C'], ['G']],
+          cost: 9,
+          badgeText: '(A-D, 4) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +4)',
+          what: '정렬 리스트 3번째 간선인 (A-D, 4)를 선택하여 집합 {A, B}와 {D}를 {A, B, D}로 합쳤습니다.',
+          why: '가중치 4로 그다음 작은 간선이며, Find(A)는 {A, B}, Find(D)는 {D}로 서로 다른 집합에 속해 사이클이 발생하지 않기 때문입니다.'
+        }
+      },
+      {
+        step: 4,
+        shortLabel: '4. 트리 합류!',
+        bannerTitle: 'Step 4: Prim은 (E-F, 3) 선택 vs Kruskal은 (B-E, 5)로 두 부분 트리를 하나로 병합!',
+        diffNote: '4단계가 끝나면 두 알고리즘 모두 순서는 달랐지만 정확히 동일한 정점 집합 {A, B, D, E, F}와 동일한 누적 가중치(14)에 도달합니다.',
+        prim: {
+          visited: ['A', 'B', 'D', 'E', 'F'],
+          selectedEdges: ['A-B', 'A-D', 'B-E', 'E-F'],
+          activeEdge: 'E-F',
+          activeType: 'select',
+          rejectedEdges: [],
+          pq: [
+            { id: 'B-D', w: 6, to: 'D' },
+            { id: 'C-F', w: 7, to: 'C' },
+            { id: 'D-E', w: 8, to: 'E' },
+            { id: 'E-G', w: 9, to: 'G' },
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' },
+            { id: 'F-G', w: 12, to: 'G' }
+          ],
+          cost: 14,
+          badgeText: '(E-F, 3) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +3)',
+          what: '직전 단계에 E가 방문되며 큐에 들어온 (E-F, 3)이 최우선 후보로 추출되어 정점 F를 연결하고, (C-F, 7), (F-G, 12)를 큐에 넣었습니다.',
+          why: '현재 우선순위 큐에 있는 후보들(3, 6, 8, 9, 10, 11) 중 가중치가 3으로 가장 작고 정점 F가 아직 방문되지 않았기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F', 'A-D', 'B-E'],
+          activeEdge: 'B-E',
+          activeType: 'select',
+          rejectedEdges: [],
+          inspectedIndex: 3,
+          sets: [['A', 'B', 'D', 'E', 'F'], ['C'], ['G']],
+          cost: 14,
+          badgeText: '(B-E, 5) 두 집합 병합 ✓',
+          decisionTag: '간선 선택 (Cost +5)',
+          what: '정렬 리스트 4번째 간선 (B-E, 5)를 선택하여 떨어져 있던 두 부분 트리 {A, B, D}와 {E, F}를 하나의 집합 {A, B, D, E, F}로 합쳤습니다.',
+          why: '정점 B는 {A, B, D} 집합에, 정점 E는 {E, F} 집합에 속해 Find(B) != Find(E)이므로 사이클 없이 두 컴포넌트를 연결할 수 있기 때문입니다.'
+        }
+      },
+      {
+        step: 5,
+        shortLabel: '5. (B-D,6) 기각✕',
+        bannerTitle: 'Step 5 [사이클 기각 발생!]: 두 알고리즘 모두 간선 (B-D, 가중치 6) 기각',
+        diffNote: '이미 A-B-D 경로가 연결되어 있어 (B-D, 6)을 추가하면 삼각형 사이클(A-B-D-A)이 생깁니다. 두 알고리즘의 기각 판별 방식을 비교해 보세요!',
+        prim: {
+          visited: ['A', 'B', 'D', 'E', 'F'],
+          selectedEdges: ['A-B', 'A-D', 'B-E', 'E-F'],
+          activeEdge: 'B-D',
+          activeType: 'reject',
+          rejectedEdges: ['B-D'],
+          pq: [
+            { id: 'C-F', w: 7, to: 'C' },
+            { id: 'D-E', w: 8, to: 'E' },
+            { id: 'E-G', w: 9, to: 'G' },
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' },
+            { id: 'F-G', w: 12, to: 'G' }
+          ],
+          cost: 14,
+          badgeText: '(B-D, 6) 사이클 기각 ✕',
+          decisionTag: '사이클 기각 (Skip)',
+          what: '우선순위 큐에서 다음 최소 간선인 (B-D, 6)을 꺼냈으나, 트리에 추가하지 않고 즉시 폐기(Skip)했습니다.',
+          why: '간선의 양 끝 정점 B와 D가 모두 이미 방문된 상태(Visited[B] = True, Visited[D] = True)이므로, 연결 시 A-B-D-A 사이클이 생기기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F', 'A-D', 'B-E'],
+          activeEdge: 'B-D',
+          activeType: 'reject',
+          rejectedEdges: ['B-D'],
+          inspectedIndex: 4,
+          sets: [['A', 'B', 'D', 'E', 'F'], ['C'], ['G']],
+          cost: 14,
+          badgeText: '(B-D, 6) 사이클 기각 ✕',
+          decisionTag: '사이클 기각 (Reject)',
+          what: '정렬 리스트 5번째 간선인 (B-D, 6)을 검사했으나 선택하지 않고 기각(Reject) 표시 후 넘어갔습니다.',
+          why: 'Union-Find로 확인한 결과 Find(B) == Find(D)로 두 정점이 이미 같은 집합 {A, B, D, E, F}에 속해 있어 A-B-D-A 사이클을 형성하기 때문입니다.'
+        }
+      },
+      {
+        step: 6,
+        shortLabel: '6. (C-F,7)',
+        bannerTitle: 'Step 6: 두 알고리즘 모두 간선 (C-F, 가중치 7)을 선택하여 정점 C 연결',
+        diffNote: '미방문 상태이자 독립 집합으로 남아있던 우측 상단 정점 C가 가중치 7인 간선을 통해 연결됩니다.',
+        prim: {
+          visited: ['A', 'B', 'C', 'D', 'E', 'F'],
+          selectedEdges: ['A-B', 'A-D', 'B-E', 'E-F', 'C-F'],
+          activeEdge: 'C-F',
+          activeType: 'select',
+          rejectedEdges: ['B-D'],
+          pq: [
+            { id: 'D-E', w: 8, to: 'E' },
+            { id: 'E-G', w: 9, to: 'G' },
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' },
+            { id: 'F-G', w: 12, to: 'G' }
+          ],
+          cost: 21,
+          badgeText: '(C-F, 7) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +7)',
+          what: '우선순위 큐에서 최소 간선인 (C-F, 7)을 꺼내 선택하고 정점 C를 방문(Visited[C] = True) 처리했습니다.',
+          why: '남은 후보 간선들(7, 8, 9, 10, 11, 12) 중 가중치가 가장 작으며 도착 정점 C가 아직 미방문 상태이기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F', 'A-D', 'B-E', 'C-F'],
+          activeEdge: 'C-F',
+          activeType: 'select',
+          rejectedEdges: ['B-D'],
+          inspectedIndex: 5,
+          sets: [['A', 'B', 'C', 'D', 'E', 'F'], ['G']],
+          cost: 21,
+          badgeText: '(C-F, 7) 선택 완료 ✓',
+          decisionTag: '간선 선택 (Cost +7)',
+          what: '정렬 리스트 6번째 간선 (C-F, 7)을 선택하여 단독 집합 {C}를 기존 대형 집합에 병합했습니다.',
+          why: '정점 F는 {A, B, D, E, F}에 속하고 정점 C는 {C}에 속해 Find(C) != Find(F)이므로 사이클을 만들지 않기 때문입니다.'
+        }
+      },
+      {
+        step: 7,
+        shortLabel: '7. (D-E,8) 기각✕',
+        bannerTitle: 'Step 7 [두 번째 사이클 기각!]: 간선 (D-E, 가중치 8) 사이클 형성으로 기각',
+        diffNote: '정점 D와 E는 이미 D-A-B-E 경로로 이어져 있으므로 (D-E, 8)을 선택하면 사각형 사이클이 발생하여 기각됩니다.',
+        prim: {
+          visited: ['A', 'B', 'C', 'D', 'E', 'F'],
+          selectedEdges: ['A-B', 'A-D', 'B-E', 'E-F', 'C-F'],
+          activeEdge: 'D-E',
+          activeType: 'reject',
+          rejectedEdges: ['B-D', 'D-E'],
+          pq: [
+            { id: 'E-G', w: 9, to: 'G' },
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' },
+            { id: 'F-G', w: 12, to: 'G' }
+          ],
+          cost: 21,
+          badgeText: '(D-E, 8) 사이클 기각 ✕',
+          decisionTag: '사이클 기각 (Skip)',
+          what: '우선순위 큐에서 꺼낸 간선 (D-E, 8)을 트리에 포함하지 않고 기각(Skip)했습니다.',
+          why: '양 끝 정점 D와 E가 모두 이미 Visited = True 상태로 트리 내부에 포함되어 있어, 선택 시 D-A-B-E-D 사이클이 발생하기 때문입니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F', 'A-D', 'B-E', 'C-F'],
+          activeEdge: 'D-E',
+          activeType: 'reject',
+          rejectedEdges: ['B-D', 'D-E'],
+          inspectedIndex: 6,
+          sets: [['A', 'B', 'C', 'D', 'E', 'F'], ['G']],
+          cost: 21,
+          badgeText: '(D-E, 8) 사이클 기각 ✕',
+          decisionTag: '사이클 기각 (Reject)',
+          what: '정렬 리스트 7번째 간선 (D-E, 8)을 검사했으나 사이클이 감지되어 기각(Reject)했습니다.',
+          why: 'Find(D) == Find(E)로 두 정점이 이미 동일 집합 {A, B, C, D, E, F}에 속해 있어 중복 연결(사이클)이 되기 때문입니다.'
+        }
+      },
+      {
+        step: 8,
+        shortLabel: '8. MST 완성!',
+        bannerTitle: 'Step 8 [최소 신장 트리 완성!]: 마지막 정점 G를 연결하는 (E-G, 9) 선택 후 즉시 종료',
+        diffNote: '정점 7개를 잇는 간선 6개(V-1 = 6)가 모두 선택되어 총 가중치 30의 동일한 MST가 완성되었습니다! 남은 간선(10, 11, 12)은 검사하지 않고 종료합니다.',
+        prim: {
+          visited: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+          selectedEdges: ['A-B', 'A-D', 'B-E', 'E-F', 'C-F', 'E-G'],
+          activeEdge: 'E-G',
+          activeType: 'complete',
+          rejectedEdges: ['B-D', 'D-E'],
+          pq: [
+            { id: 'B-C', w: 10, to: 'C' },
+            { id: 'D-G', w: 11, to: 'G' },
+            { id: 'F-G', w: 12, to: 'G' }
+          ],
+          cost: 30,
+          badgeText: '🎉 MST 완성! (총 비용 30)',
+          decisionTag: '완성 및 종료 (Cost 30)',
+          what: '우선순위 큐에서 (E-G, 9)를 꺼내 마지막 미방문 정점 G를 연결하여 총 6개 간선(가중치 합 30)으로 MST를 완성하고 종료했습니다.',
+          why: '정점 G가 미방문 상태이므로 선택하며, 이제 모든 정점 7개가 연결(간선 V-1 = 6개 달성)되었으므로 큐에 남은 (10, 11, 12) 간선은 볼 필요 없이 종료합니다.'
+        },
+        kruskal: {
+          selectedEdges: ['A-B', 'E-F', 'A-D', 'B-E', 'C-F', 'E-G'],
+          activeEdge: 'E-G',
+          activeType: 'complete',
+          rejectedEdges: ['B-D', 'D-E'],
+          inspectedIndex: 7,
+          sets: [['A', 'B', 'C', 'D', 'E', 'F', 'G']],
+          cost: 30,
+          badgeText: '🎉 MST 완성! (총 비용 30)',
+          decisionTag: '완성 및 종료 (Cost 30)',
+          what: '정렬 리스트 8번째 간선 (E-G, 9)를 선택해 마지막 집합 {G}를 병합하고, 간선 6개가 모두 채워져 알고리즘을 즉시 종료했습니다.',
+          why: 'Find(E) != Find(G)이므로 선택하며, 선택된 간선 수가 V - 1 = 6개(총 가중치 30)에 도달했으므로 뒤의 무거운 간선 (10, 11, 12)는 검사하지 않고 종료합니다.'
+        }
+      }
+    ];
+
+    // Current state variables
+    let currentStep = 0;
+    let autoPlayTimer = null;
+
+    // Initialize timeline buttons & summary table on load
+    window.addEventListener('DOMContentLoaded', () => {
+      renderTimelineButtons();
+      renderSummaryTable();
+      renderStep(0);
+
+      // Keyboard navigation support for smooth video recording
+      window.addEventListener('keydown', (e) => {
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+          e.preventDefault();
+          nextStep();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          prevStep();
+        } else if (e.key === 'r' || e.key === 'R') {
+          e.preventDefault();
+          resetStep();
+        }
+      });
+    });
+
+    // Render top interactive step timeline bar
+    function renderTimelineButtons() {
+      const container = document.getElementById('stepButtonsContainer');
+      container.innerHTML = '';
+      STEPS.forEach((s, idx) => {
+        const isCurrent = idx === currentStep;
+        const isRejectStep = idx === 5 || idx === 7;
+        const isDiffStep = idx === 2;
+        const btn = document.createElement('button');
+        btn.onclick = () => goToStep(idx);
+
+        let baseClasses = 'px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shrink-0 border ';
+        if (isCurrent) {
+          baseClasses += 'bg-sky-500 text-slate-950 border-sky-400 shadow-md shadow-sky-500/20 scale-[1.03]';
+        } else if (idx < currentStep) {
+          baseClasses += 'bg-slate-800/90 text-emerald-300 border-emerald-500/30 hover:bg-slate-800';
+        } else {
+          baseClasses += 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200';
+        }
+
+        if (isRejectStep && !isCurrent) {
+          baseClasses += ' text-rose-300 border-rose-500/30';
+        } else if (isDiffStep && !isCurrent) {
+          baseClasses += ' text-amber-300 border-amber-500/30';
+        }
+
+        btn.className = baseClasses;
+        btn.innerHTML = `<span>${s.shortLabel}</span>`;
+        container.appendChild(btn);
+      });
+    }
+
+    // Render Graph SVG (used for both Prim and Kruskal with mode parameter)
+    function renderGraphSVG(mode, stepData) {
+      const edgesGroup = document.getElementById(mode === 'prim' ? 'primEdgesGroup' : 'kruskalEdgesGroup');
+      const verticesGroup = document.getElementById(mode === 'prim' ? 'primVerticesGroup' : 'kruskalVerticesGroup');
+      edgesGroup.innerHTML = '';
+      verticesGroup.innerHTML = '';
+
+      const state = stepData[mode];
+      const candidateEdgeIds = mode === 'prim' ? state.pq.map(item => item.id) : [];
+
+      // 1. Draw all 11 Edges
+      EDGES.forEach((edge) => {
+        const uNode = VERTICES[edge.u];
+        const vNode = VERTICES[edge.v];
+
+        const isSelected = state.selectedEdges.includes(edge.id);
+        const isRejected = state.rejectedEdges.includes(edge.id);
+        const isActive = state.activeEdge === edge.id;
+        const isCandidate = mode === 'prim' && candidateEdgeIds.includes(edge.id) && !isSelected && !isRejected;
+
+        // Calculate midpoint for weight badge (slightly offset overlapping badges if needed)
+        let midX = (uNode.x + vNode.x) / 2;
+        let midY = (uNode.y + vNode.y) / 2;
+
+        // Slight visual offsets for diagonal edges so badges look super clean
+        if (edge.id === 'B-D') { midX -= 12; midY -= 6; }
+        if (edge.id === 'D-E') { midY -= 3; }
+
+        // Determine stroke styles
+        let strokeColor = '#334155'; // default unvisited slate-700
+        let strokeWidth = 2.5;
+        let extraClass = 'edge-line';
+        let dashArray = '';
+
+        if (isActive && state.activeType === 'reject') {
+          strokeColor = '#f43f5e'; // rose-500
+          strokeWidth = 4.5;
+          dashArray = '6,5';
+          extraClass += ' reject-anim';
+        } else if (isActive) {
+          strokeColor = '#38bdf8'; // sky-400 active highlight
+          strokeWidth = 5.5;
+          extraClass += ' active-glow';
+        } else if (isSelected) {
+          strokeColor = '#10b981'; // emerald-500 MST confirmed
+          strokeWidth = 4.5;
+        } else if (isRejected) {
+          strokeColor = '#881337'; // muted rose for previously rejected
+          strokeWidth = 2;
+          dashArray = '4,4';
+        } else if (isCandidate) {
+          strokeColor = '#f59e0b'; // amber-500 candidate in Prim PQ
+          strokeWidth = 3;
+          extraClass += ' candidate-dash';
+        }
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        // Glow background line for active or selected edges
+        if (isActive || isSelected) {
+          const glowLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          glowLine.setAttribute('x1', uNode.x);
+          glowLine.setAttribute('y1', uNode.y);
+          glowLine.setAttribute('x2', vNode.x);
+          glowLine.setAttribute('y2', vNode.y);
+          glowLine.setAttribute('stroke', isActive && state.activeType === 'reject' ? 'rgba(244,63,94,0.35)' : isActive ? 'rgba(56,189,248,0.45)' : 'rgba(16,185,129,0.28)');
+          glowLine.setAttribute('stroke-width', isActive ? '12' : '9');
+          glowLine.setAttribute('stroke-linecap', 'round');
+          g.appendChild(glowLine);
+        }
+
+        // Main Edge Line
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', uNode.x);
+        line.setAttribute('y1', uNode.y);
+        line.setAttribute('x2', vNode.x);
+        line.setAttribute('y2', vNode.y);
+        line.setAttribute('stroke', strokeColor);
+        line.setAttribute('stroke-width', strokeWidth);
+        line.setAttribute('stroke-linecap', 'round');
+        if (dashArray) line.setAttribute('stroke-dasharray', dashArray);
+        line.setAttribute('class', extraClass);
+        g.appendChild(line);
+
+        // Edge Weight Badge Pill
+        let badgeFill = '#0f172a';
+        let badgeStroke = '#475569';
+        let badgeTextColor = '#94a3b8';
+
+        if (isActive && state.activeType === 'reject') {
+          badgeFill = '#4c0519';
+          badgeStroke = '#f43f5e';
+          badgeTextColor = '#fda4af';
+        } else if (isActive) {
+          badgeFill = '#082f49';
+          badgeStroke = '#38bdf8';
+          badgeTextColor = '#e0f2fe';
+        } else if (isSelected) {
+          badgeFill = '#064e3b';
+          badgeStroke = '#10b981';
+          badgeTextColor = '#a7f3d0';
+        } else if (isRejected) {
+          badgeFill = '#1e293b';
+          badgeStroke = '#881337';
+          badgeTextColor = '#f43f5e';
+        } else if (isCandidate) {
+          badgeFill = '#451a03';
+          badgeStroke = '#f59e0b';
+          badgeTextColor = '#fde68a';
+        }
+
+        const badgeRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        badgeRect.setAttribute('x', midX - 13);
+        badgeRect.setAttribute('y', midY - 10);
+        badgeRect.setAttribute('width', 26);
+        badgeRect.setAttribute('height', 20);
+        badgeRect.setAttribute('rx', 6);
+        badgeRect.setAttribute('fill', badgeFill);
+        badgeRect.setAttribute('stroke', badgeStroke);
+        badgeRect.setAttribute('stroke-width', isActive || isSelected ? '2' : '1.2');
+        badgeRect.setAttribute('class', 'weight-badge');
+        g.appendChild(badgeRect);
+
+        const weightText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        weightText.setAttribute('x', midX);
+        weightText.setAttribute('y', midY + 4);
+        weightText.setAttribute('text-anchor', 'middle');
+        weightText.setAttribute('fill', badgeTextColor);
+        weightText.setAttribute('font-size', '11');
+        weightText.setAttribute('font-weight', '800');
+        weightText.setAttribute('font-family', 'JetBrains Mono, monospace');
+        weightText.textContent = isRejected ? `✕${edge.w}` : edge.w;
+        g.appendChild(weightText);
+
+        edgesGroup.appendChild(g);
+      });
+
+      // 2. Draw all 7 Vertices
+      Object.values(VERTICES).forEach((v) => {
+        const vg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        let fill = '#1e293b';
+        let stroke = '#64748b';
+        let textColor = '#e2e8f0';
+        let strokeW = 2.5;
+        let isVertexActive = false;
+
+        if (state.activeEdge) {
+          const [au, av] = state.activeEdge.split('-');
+          if (au === v.id || av === v.id) isVertexActive = true;
+        }
+
+        if (mode === 'prim') {
+          const isVisited = state.visited.includes(v.id);
+          if (isVisited) {
+            fill = '#064e3b';
+            stroke = isVertexActive ? '#38bdf8' : '#10b981';
+            textColor = '#ecfdf5';
+            strokeW = isVertexActive ? 4 : 3;
+          }
+        } else {
+          // Kruskal: color vertices by their Disjoint Set representative!
+          const setGroup = state.sets.find(arr => arr.includes(v.id)) || [v.id];
+          const rep = setGroup[0];
+          if (setGroup.length > 1) {
+            const palette = SET_COLORS[rep] || SET_COLORS['A'];
+            fill = palette.fill;
+            stroke = isVertexActive ? '#38bdf8' : palette.stroke;
+            textColor = palette.text;
+            strokeW = isVertexActive ? 4 : 3;
+          }
+        }
+
+        // Outer ring for start vertex A in Prim
+        if (mode === 'prim' && v.id === 'A') {
+          const startRing = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          startRing.setAttribute('cx', v.x);
+          startRing.setAttribute('cy', v.y);
+          startRing.setAttribute('r', 24);
+          startRing.setAttribute('fill', 'none');
+          startRing.setAttribute('stroke', '#38bdf8');
+          startRing.setAttribute('stroke-width', '1.2');
+          startRing.setAttribute('stroke-dasharray', '3,3');
+          vg.appendChild(startRing);
+        }
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', v.x);
+        circle.setAttribute('cy', v.y);
+        circle.setAttribute('r', 19);
+        circle.setAttribute('fill', fill);
+        circle.setAttribute('stroke', stroke);
+        circle.setAttribute('stroke-width', strokeW);
+        circle.setAttribute('class', `vertex-circle ${isVertexActive ? 'vertex-active' : ''}`);
+        vg.appendChild(circle);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', v.x);
+        label.setAttribute('y', v.y + 5);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('fill', textColor);
+        label.setAttribute('font-size', '14');
+        label.setAttribute('font-weight', '800');
+        label.textContent = v.id;
+        vg.appendChild(label);
+
+        verticesGroup.appendChild(vg);
+      });
+    }
+
+    // Render Auxiliary Data Structures & Korean Explanations for Current Step
+    function renderStep(stepIdx) {
+      currentStep = stepIdx;
+      const data = STEPS[stepIdx];
+
+      // Update Header Counter & Buttons
+      document.getElementById('stepCurrentText').textContent = stepIdx;
+      document.getElementById('btnPrev').disabled = stepIdx === 0;
+      document.getElementById('btnNext').disabled = stepIdx === STEPS.length - 1;
+      renderTimelineButtons();
+
+      // Update Top Highlight Banner
+      const stepBadge = document.getElementById('stepBadgeTag');
+      stepBadge.textContent = `STEP ${stepIdx} / 8`;
+      if (stepIdx === 2) {
+        stepBadge.className = 'px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono-code';
+      } else if (stepIdx === 5 || stepIdx === 7) {
+        stepBadge.className = 'px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono-code';
+      } else if (stepIdx === 8) {
+        stepBadge.className = 'px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono-code';
+      } else {
+        stepBadge.className = 'px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/40 font-mono-code';
+      }
+      document.getElementById('stepHighlightTitle').textContent = data.bannerTitle;
+      document.getElementById('stepDiffNote').innerHTML = `<span>💡</span><span>${data.diffNote}</span>`;
+
+      // Render both SVG Canvases
+      renderGraphSVG('prim', data);
+      renderGraphSVG('kruskal', data);
+
+      // Update Prim Metrics & Badges
+      const p = data.prim;
+      document.getElementById('primEdgeCount').textContent = `${p.selectedEdges.length} / 6`;
+      document.getElementById('primTotalCost').textContent = p.cost;
+      document.getElementById('primVisitedCount').textContent = `${p.visited.length} / 7 방문`;
+
+      const primActionBadge = document.getElementById('primActionBadge');
+      primActionBadge.textContent = p.badgeText;
+      primActionBadge.className = getBadgeStyle(p.activeType);
+
+      document.getElementById('primDecisionTag').textContent = p.decisionTag;
+      document.getElementById('primDecisionTag').className = getTagStyle(p.activeType, 'sky');
+      document.getElementById('primWhatText').textContent = p.what;
+      document.getElementById('primWhyText').textContent = p.why;
+
+      // Render Prim Visited Array (A ~ G)
+      const visitedBox = document.getElementById('primVisitedBox');
+      visitedBox.innerHTML = '';
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G'].forEach(vId => {
+        const isVis = p.visited.includes(vId);
+        const div = document.createElement('div');
+        div.className = `rounded-lg py-1 text-center border text-[11px] font-mono-code font-bold transition ${
+          isVis
+            ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300'
+            : 'bg-slate-900 border-slate-800 text-slate-500'
+        }`;
+        div.innerHTML = `<div>${vId}</div><div class="text-[9px]">${isVis ? 'T' : 'F'}</div>`;
+        visitedBox.appendChild(div);
+      });
+
+      // Render Prim Priority Queue
+      const pqBox = document.getElementById('primPQBox');
+      pqBox.innerHTML = '';
+      if (p.pq.length === 0) {
+        pqBox.innerHTML = `<span class="text-xs text-slate-500">비어 있음</span>`;
+      } else {
+        p.pq.forEach((item, idx) => {
+          const isTargetVisited = p.visited.includes(item.to);
+          const pill = document.createElement('span');
+          pill.className = `px-2 py-1 rounded-lg text-[11px] font-mono-code font-semibold border flex items-center gap-1 ${
+            idx === 0 && stepIdx < 8
+              ? 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-sm'
+              : isTargetVisited
+              ? 'bg-slate-900/80 border-rose-500/30 text-slate-400 line-through'
+              : 'bg-slate-900 border-slate-700 text-slate-300'
+          }`;
+          pill.innerHTML = `<span>(${item.id}, <strong>${item.w}</strong>)</span>`;
+          pqBox.appendChild(pill);
+        });
+      }
+
+      // Update Kruskal Metrics & Badges
+      const k = data.kruskal;
+      document.getElementById('kruskalEdgeCount').textContent = `${k.selectedEdges.length} / 6`;
+      document.getElementById('kruskalTotalCost').textContent = k.cost;
+      document.getElementById('kruskalSetCount').textContent = `집합 ${k.sets.length}개`;
+
+      const kruskalActionBadge = document.getElementById('kruskalActionBadge');
+      kruskalActionBadge.textContent = k.badgeText;
+      kruskalActionBadge.className = getBadgeStyle(k.activeType);
+
+      document.getElementById('kruskalDecisionTag').textContent = k.decisionTag;
+      document.getElementById('kruskalDecisionTag').className = getTagStyle(k.activeType, 'violet');
+      document.getElementById('kruskalWhatText').textContent = k.what;
+      document.getElementById('kruskalWhyText').textContent = k.why;
+
+      // Render Kruskal Disjoint Sets
+      const setsBox = document.getElementById('kruskalSetsBox');
+      setsBox.innerHTML = '';
+      k.sets.forEach(group => {
+        const rep = group[0];
+        const isMulti = group.length > 1;
+        const badge = document.createElement('span');
+        badge.className = `px-2 py-1 rounded-lg text-[11px] font-mono-code font-bold border ${
+          isMulti
+            ? 'bg-violet-950/80 border-violet-400/60 text-violet-200'
+            : 'bg-slate-900 border-slate-800 text-slate-400'
+        }`;
+        badge.textContent = `{${group.join(',')}}`;
+        setsBox.appendChild(badge);
+      });
+
+      // Render Kruskal Sorted 11 Edges List
+      const sortedBox = document.getElementById('kruskalSortedEdgesBox');
+      sortedBox.innerHTML = '';
+      EDGES.forEach((edge, idx) => {
+        const isSel = k.selectedEdges.includes(edge.id);
+        const isRej = k.rejectedEdges.includes(edge.id);
+        const isCurr = k.activeEdge === edge.id;
+        const isSkippedAfterFinish = stepIdx === 8 && idx > 7;
+
+        let cls = 'px-1.5 py-0.5 rounded text-[10px] font-mono-code font-semibold border transition ';
+        if (isCurr && k.activeType === 'reject') {
+          cls += 'bg-rose-500/30 border-rose-400 text-rose-200 ring-2 ring-rose-400/50';
+        } else if (isCurr) {
+          cls += 'bg-sky-500/30 border-sky-400 text-sky-100 ring-2 ring-sky-400/50';
+        } else if (isSel) {
+          cls += 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300';
+        } else if (isRej) {
+          cls += 'bg-rose-950/60 border-rose-800 text-rose-400 line-through';
+        } else if (isSkippedAfterFinish) {
+          cls += 'bg-slate-900/40 border-slate-800 text-slate-600';
+        } else {
+          cls += 'bg-slate-900 border-slate-800 text-slate-400';
+        }
+
+        const item = document.createElement('span');
+        item.className = cls;
+        item.textContent = `${edge.id}(${edge.w})`;
+        sortedBox.appendChild(item);
+      });
+    }
+
+    function getBadgeStyle(activeType) {
+      const base = 'absolute top-2.5 right-3 z-10 px-2.5 py-1 rounded-lg text-xs font-extrabold border shadow ';
+      if (activeType === 'select') return base + 'bg-emerald-950/95 text-emerald-300 border-emerald-500/60';
+      if (activeType === 'reject') return base + 'bg-rose-950/95 text-rose-300 border-rose-500/60';
+      if (activeType === 'complete') return base + 'bg-amber-950/95 text-amber-300 border-amber-400';
+      return base + 'bg-slate-800 text-slate-300 border-slate-700';
+    }
+
+    function getTagStyle(activeType, themeColor) {
+      const base = 'px-2 py-0.5 rounded text-[11px] font-bold ';
+      if (activeType === 'select') return base + 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+      if (activeType === 'reject') return base + 'bg-rose-500/20 text-rose-300 border border-rose-500/40';
+      if (activeType === 'complete') return base + 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+      return base + `bg-${themeColor}-500/20 text-${themeColor}-300`;
+    }
+
+    // Render Tab 3 Summary Table
+    function renderSummaryTable() {
+      const tbody = document.getElementById('summaryTableBody');
+      tbody.innerHTML = '';
+      STEPS.forEach((s, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/60 cursor-pointer transition';
+        tr.onclick = () => {
+          switchTab('visualizer');
+          goToStep(idx);
+        };
+
+        const isReject = idx === 5 || idx === 7;
+        const isDiff = idx === 2;
+
+        tr.innerHTML = `
+          <td class="py-3 px-3 font-mono-code font-bold ${isReject ? 'text-rose-400' : isDiff ? 'text-amber-300' : 'text-sky-400'}">
+            Step ${idx}<br><span class="text-[10px] font-normal text-slate-400">${s.shortLabel}</span>
+          </td>
+          <td class="py-3 px-3 text-slate-200 leading-relaxed">
+            <div class="font-bold text-sky-300 mb-0.5">${s.prim.badgeText}</div>
+            <div class="text-slate-300">${s.prim.what}</div>
+            <div class="text-slate-400 text-[11px] mt-0.5">→ 이유: ${s.prim.why}</div>
+          </td>
+          <td class="py-3 px-3 text-slate-200 leading-relaxed">
+            <div class="font-bold text-violet-300 mb-0.5">${s.kruskal.badgeText}</div>
+            <div class="text-slate-300">${s.kruskal.what}</div>
+            <div class="text-slate-400 text-[11px] mt-0.5">→ 이유: ${s.kruskal.why}</div>
+          </td>
+          <td class="py-3 px-3 text-center font-mono-code font-bold">
+            <span class="text-sky-300">P: ${s.prim.cost}</span><br>
+            <span class="text-violet-300">K: ${s.kruskal.cost}</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Navigation & Playback Functions
+    function nextStep() {
+      if (currentStep < STEPS.length - 1) {
+        renderStep(currentStep + 1);
+      } else if (autoPlayTimer) {
+        stopAutoPlay();
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 0) {
+        renderStep(currentStep - 1);
+      }
+    }
+
+    function resetStep() {
+      stopAutoPlay();
+      renderStep(0);
+    }
+
+    function goToStep(idx) {
+      renderStep(idx);
+    }
+
+    function toggleAutoPlay() {
+      if (autoPlayTimer) {
+        stopAutoPlay();
+      } else {
+        if (currentStep === STEPS.length - 1) {
+          renderStep(0);
+        }
+        const interval = parseInt(document.getElementById('speedSelect').value, 10);
+        document.getElementById('autoPlayIcon').textContent = '⏸';
+        document.getElementById('autoPlayText').textContent = '일시정지';
+        document.getElementById('btnAutoPlay').classList.replace('text-sky-300', 'text-amber-300');
+        autoPlayTimer = setInterval(() => {
+          if (currentStep < STEPS.length - 1) {
+            renderStep(currentStep + 1);
+          } else {
+            stopAutoPlay();
+          }
+        }, interval);
+      }
+    }
+
+    function stopAutoPlay() {
+      if (autoPlayTimer) {
+        clearInterval(autoPlayTimer);
+        autoPlayTimer = null;
+      }
+      document.getElementById('autoPlayIcon').textContent = '▶';
+      document.getElementById('autoPlayText').textContent = '자동재생';
+      document.getElementById('btnAutoPlay').classList.replace('text-amber-300', 'text-sky-300');
+    }
+
+    function updateAutoPlaySpeed() {
+      if (autoPlayTimer) {
+        stopAutoPlay();
+        toggleAutoPlay();
+      }
+    }
+
+    // Tab Switching (Visualizer / Theory & Pseudocode / All Steps Summary)
+    function switchTab(tabName) {
+      const views = {
+        visualizer: document.getElementById('viewVisualizer'),
+        theory: document.getElementById('viewTheory'),
+        summary: document.getElementById('viewSummary')
+      };
+      const btns = {
+        visualizer: document.getElementById('tabBtnVisualizer'),
+        theory: document.getElementById('tabBtnTheory'),
+        summary: document.getElementById('tabBtnSummary')
+      };
+
+      Object.keys(views).forEach(key => {
+        if (key === tabName) {
+          views[key].classList.remove('hidden');
+          btns[key].className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-sky-500 text-slate-950 shadow';
+        } else {
+          views[key].classList.add('hidden');
+          btns[key].className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-slate-200';
+        }
+      });
+    }
+  </script>
+</body>
+</html>
